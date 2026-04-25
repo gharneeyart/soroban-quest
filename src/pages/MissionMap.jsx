@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadProgress } from '../systems/storage';
 import { getAllMissions, isMissionUnlocked } from '../systems/missionLoader';
@@ -7,6 +7,8 @@ export default function MissionMap() {
     const navigate = useNavigate();
     const state = loadProgress();
     const missions = getAllMissions();
+    const learningPathRef = useRef(null);
+    const [learningPathWidth, setLearningPathWidth] = useState(800);
 
     const missionStates = useMemo(() => {
         return missions.map((m) => ({
@@ -22,6 +24,62 @@ export default function MissionMap() {
         }
     };
 
+    useEffect(() => {
+        if (!learningPathRef.current || typeof ResizeObserver === 'undefined') {
+            return undefined;
+        }
+
+        const node = learningPathRef.current;
+        const updateWidth = (width) => {
+            setLearningPathWidth(Math.max(320, Math.floor(width)));
+        };
+
+        updateWidth(node.getBoundingClientRect().width);
+
+        const observer = new ResizeObserver((entries) => {
+            if (entries[0]) {
+                updateWidth(entries[0].contentRect.width);
+            }
+        });
+
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, []);
+
+    const desktopPathLayout = useMemo(() => {
+        const width = Math.max(learningPathWidth, 320);
+        const cols = width >= 1024 ? 4 : width >= 860 ? 3 : 2;
+        const rows = Math.ceil(missionStates.length / cols);
+        const topPadding = 70;
+        const horizontalPadding = cols === 2 ? 72 : 80;
+        const rowSpacing = 140;
+        const bottomPadding = 110;
+        const usableWidth = Math.max(width - horizontalPadding * 2, 1);
+        const colSpacing = cols > 1 ? usableWidth / (cols - 1) : 0;
+
+        const points = missionStates.map((m, i) => {
+            const row = Math.floor(i / cols);
+            const colInRow = i % cols;
+            const isReverse = row % 2 === 1;
+            const col = isReverse ? cols - 1 - colInRow : colInRow;
+
+            return {
+                mission: m,
+                cx: horizontalPadding + col * colSpacing,
+                cy: topPadding + row * rowSpacing,
+                index: i,
+            };
+        });
+
+        const height = topPadding + Math.max(0, rows - 1) * rowSpacing + bottomPadding;
+
+        return {
+            width: Math.round(width),
+            height: Math.round(Math.max(height, 280)),
+            points,
+        };
+    }, [learningPathWidth, missionStates]);
+
     return (
         <div className="mission-map-page">
             <div className="mission-map-header">
@@ -32,73 +90,92 @@ export default function MissionMap() {
             </div>
 
             {/* SVG Learning Path */}
-            <div className="learning-path">
-                <svg viewBox="0 0 800 360" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    {missionStates.map((m, i) => {
-                        const cols = 4;
-                        const row = Math.floor(i / cols);
-                        const colInRow = i % cols;
-                        const isReverse = row % 2 === 1;
-                        const col = isReverse ? (cols - 1 - colInRow) : colInRow;
-                        const cx = 100 + col * 200;
-                        const cy = 60 + row * 140;
-
-                        // Connect to next node
-                        let nextCx, nextCy;
-                        if (i < missionStates.length - 1) {
-                            const nextRow = Math.floor((i + 1) / cols);
-                            const nextColInRow = (i + 1) % cols;
-                            const nextIsReverse = nextRow % 2 === 1;
-                            const nextCol = nextIsReverse ? (cols - 1 - nextColInRow) : nextColInRow;
-                            nextCx = 100 + nextCol * 200;
-                            nextCy = 60 + nextRow * 140;
-                        }
-
-                        const nodeColor = m.completed ? '#22c55e' : m.unlocked ? '#06d6a0' : '#374151';
-                        const textColor = m.completed ? '#22c55e' : m.unlocked ? '#f1f5f9' : '#4b5563';
-                        const glowFilter = m.completed ? 'url(#glowGreen)' : m.unlocked ? 'url(#glowCyan)' : '';
+            <div className="learning-path learning-path-desktop" ref={learningPathRef}>
+                <svg
+                    viewBox={`0 0 ${desktopPathLayout.width} ${desktopPathLayout.height}`}
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    role="img"
+                    aria-label="Mission path graph"
+                >
+                    {desktopPathLayout.points.map(({ mission, cx, cy, index }) => {
+                        const next = desktopPathLayout.points[index + 1];
+                        const nodeColor = mission.completed ? '#22c55e' : mission.unlocked ? '#06d6a0' : '#374151';
+                        const textColor = mission.completed ? '#22c55e' : mission.unlocked ? '#f1f5f9' : '#4b5563';
+                        const glowFilter = mission.completed ? 'url(#glowGreen)' : mission.unlocked ? 'url(#glowCyan)' : '';
+                        const shortTitle = mission.title.length > 20 ? `${mission.title.slice(0, 19)}…` : mission.title;
 
                         return (
-                            <g key={m.id}>
-                                {nextCx !== undefined && (
+                            <g key={mission.id}>
+                                {next && (
                                     <line
-                                        x1={cx} y1={cy} x2={nextCx} y2={nextCy}
-                                        stroke={m.completed ? '#22c55e' : '#1f2937'}
+                                        x1={cx}
+                                        y1={cy}
+                                        x2={next.cx}
+                                        y2={next.cy}
+                                        stroke={mission.completed ? '#22c55e' : '#1f2937'}
                                         strokeWidth="2"
-                                        strokeDasharray={m.completed ? '' : '6 4'}
-                                        className={m.completed ? 'path-line completed' : 'path-line'}
+                                        strokeDasharray={mission.completed ? '' : '6 4'}
+                                        className={mission.completed ? 'path-line completed' : 'path-line'}
                                     />
                                 )}
                                 <g
                                     className="path-node"
-                                    onClick={() => handleMissionClick(m)}
-                                    style={{ cursor: m.unlocked ? 'pointer' : 'not-allowed' }}
+                                    onClick={() => handleMissionClick(mission)}
+                                    onKeyDown={(event) => {
+                                        if (mission.unlocked && (event.key === 'Enter' || event.key === ' ')) {
+                                            event.preventDefault();
+                                            handleMissionClick(mission);
+                                        }
+                                    }}
+                                    role={mission.unlocked ? 'button' : undefined}
+                                    tabIndex={mission.unlocked ? 0 : -1}
+                                    aria-label={`Mission ${mission.order}: ${mission.title}`}
+                                    style={{ cursor: mission.unlocked ? 'pointer' : 'not-allowed' }}
                                 >
+                                    <circle className="path-node-hit-area" cx={cx} cy={cy} r="28" fill="transparent" />
                                     <circle
                                         className="path-node-circle"
-                                        cx={cx} cy={cy} r="24"
-                                        fill={m.completed ? 'rgba(34,197,94,0.15)' : m.unlocked ? 'rgba(6,214,160,0.1)' : 'rgba(31,41,55,0.5)'}
+                                        cx={cx}
+                                        cy={cy}
+                                        r="24"
+                                        fill={mission.completed ? 'rgba(34,197,94,0.15)' : mission.unlocked ? 'rgba(6,214,160,0.1)' : 'rgba(31,41,55,0.5)'}
                                         stroke={nodeColor}
                                         strokeWidth="2"
                                         filter={glowFilter}
                                     />
-                                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
-                                        fill={m.completed ? '#22c55e' : m.unlocked ? '#06d6a0' : '#6b7280'}
-                                        fontSize="14" fontWeight="bold"
+                                    <text
+                                        x={cx}
+                                        y={cy + 1}
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        fill={mission.completed ? '#22c55e' : mission.unlocked ? '#06d6a0' : '#6b7280'}
+                                        fontSize="14"
+                                        fontWeight="bold"
                                     >
-                                        {m.completed ? '✓' : m.unlocked ? m.order : '🔒'}
+                                        {mission.completed ? '✓' : mission.unlocked ? mission.order : '🔒'}
                                     </text>
-                                    <text x={cx} y={cy + 42} textAnchor="middle"
-                                        fill={textColor} fontSize="11" fontWeight="500"
+                                    <text
+                                        x={cx}
+                                        y={cy + 42}
+                                        textAnchor="middle"
+                                        fill={textColor}
+                                        fontSize="11"
+                                        fontWeight="500"
                                         fontFamily="Inter, sans-serif"
                                     >
-                                        {m.title}
+                                        {shortTitle}
                                     </text>
-                                    <text x={cx} y={cy + 56} textAnchor="middle"
-                                        fill={m.completed ? '#22c55e' : '#f59e0b'}
-                                        fontSize="9" fontWeight="600" fontFamily="Orbitron, sans-serif"
+                                    <text
+                                        x={cx}
+                                        y={cy + 56}
+                                        textAnchor="middle"
+                                        fill={mission.completed ? '#22c55e' : '#f59e0b'}
+                                        fontSize="9"
+                                        fontWeight="600"
+                                        fontFamily="Orbitron, sans-serif"
                                     >
-                                        {m.completed ? 'COMPLETED' : `${m.xpReward} XP`}
+                                        {mission.completed ? 'COMPLETED' : `${mission.xpReward} XP`}
                                     </text>
                                 </g>
                             </g>
@@ -119,6 +196,37 @@ export default function MissionMap() {
                         </filter>
                     </defs>
                 </svg>
+            </div>
+            <div className="learning-path-mobile" aria-label="Mission timeline">
+                {missionStates.map((m, i) => (
+                    <button
+                        type="button"
+                        key={m.id}
+                        className={`timeline-item ${m.completed ? 'completed' : ''} ${!m.unlocked ? 'locked' : ''}`}
+                        onClick={() => handleMissionClick(m)}
+                        disabled={!m.unlocked}
+                        aria-label={`Mission ${m.order}: ${m.title}${m.completed ? ', completed' : m.unlocked ? ', unlocked' : ', locked'}`}
+                    >
+                        <span className="timeline-track" aria-hidden="true">
+                            <span className="timeline-node">
+                                {m.completed ? '✓' : m.unlocked ? m.order : '🔒'}
+                            </span>
+                            {i < missionStates.length - 1 && (
+                                <span className={`timeline-line ${m.completed ? 'completed' : ''}`} />
+                            )}
+                        </span>
+                        <span className="timeline-body">
+                            <span className="timeline-meta">
+                                Chapter {m.chapter} • Mission {m.order}
+                            </span>
+                            <span className="timeline-title">{m.title}</span>
+                            <span className="timeline-foot">
+                                <span className="timeline-xp">⚡ {m.xpReward} XP</span>
+                                <span className={`badge badge-${m.difficulty}`}>{m.difficulty}</span>
+                            </span>
+                        </span>
+                    </button>
+                ))}
             </div>
 
             {/* Mission Cards Grid */}
