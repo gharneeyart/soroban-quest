@@ -1,4 +1,3 @@
-// MissionDetail.jsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Editor from "@monaco-editor/react";
@@ -14,13 +13,18 @@ import {
 import MissionDetailSkeleton from "../components/MissionDetailSkeleton";
 import { useokashi, TOAST_STATES } from "../systems/useokashi";
 
+// 1. Import the specialized boundaries
+import {
+  EditorErrorBoundary,
+  MissionErrorBoundary,
+} from "../components/ErrorBoundary";
+
 export default function MissionDetail() {
   const { missionId } = useParams();
   const navigate = useNavigate();
   const mission = getMissionById(missionId);
 
-  // --------------------------- States ---------------------------
-  const [loading, setLoading] = useState(true); // Show skeleton while mission loads
+  const [loading, setLoading] = useState(true);
   const [code, setCode] = useState("");
   const [testResults, setTestResults] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -31,11 +35,9 @@ export default function MissionDetail() {
   const terminalBodyRef = useRef(null);
   const { openInOkashi, toast } = useokashi();
 
-  // --------------------------- Load Mission ---------------------------
   useEffect(() => {
     setLoading(true);
     if (mission) {
-      // Brief delay to display skeleton
       setTimeout(() => {
         setCode(mission.template);
         setTestResults([]);
@@ -48,36 +50,30 @@ export default function MissionDetail() {
     }
   }, [missionId, mission]);
 
-  // --------------------------- Auto-scroll terminal ---------------------------
   useEffect(() => {
     if (terminalBodyRef.current) {
       terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
     }
   }, [testResults]);
 
-  // --------------------------- Run Tests ---------------------------
   const handleRunTests = useCallback(async () => {
     if (isRunning || !mission) return;
     setIsRunning(true);
     setTestResults([]);
 
-    // Record user attempt
     let state = loadProgress();
     state = recordAttempt(state, missionId);
     saveProgress(state);
 
-    // Collect and display test results progressively
     const resultCollector = [];
     const addResult = (result) => {
       resultCollector.push(result);
       setTestResults([...resultCollector]);
     };
 
-    // Initial info message
     addResult({ phase: "info", message: "🔍 Running validation checks..." });
     await delay(400);
 
-    // Run mission tests
     const result = await runTests(code, mission);
     for (const r of result.results) {
       addResult(r);
@@ -87,7 +83,6 @@ export default function MissionDetail() {
     await delay(300);
     addResult({ phase: "summary", message: result.summary });
 
-    // Handle victory if all tests pass
     if (result.allPassed) {
       await delay(500);
       state = loadProgress();
@@ -113,14 +108,12 @@ export default function MissionDetail() {
     setIsRunning(false);
   }, [code, mission, missionId, isRunning]);
 
-  // --------------------------- Hints ---------------------------
   const handleHint = () => {
     if (mission && hintIndex < mission.hints.length - 1) {
       setHintIndex(hintIndex + 1);
     }
   };
 
-  // --------------------------- Reset ---------------------------
   const handleReset = () => {
     if (mission) {
       setCode(mission.template);
@@ -129,24 +122,20 @@ export default function MissionDetail() {
     }
   };
 
-  // --------------------------- Show Solution ---------------------------
   const handleShowSolution = () => {
     if (mission?.solution) {
       setCode(mission.solution);
     }
   };
 
-  // --------------------------- Navigate to Next Mission ---------------------------
   const handleNextMission = () => {
     const next = getNextMission(missionId);
     if (next) navigate(`/mission/${next.id}`);
     else navigate("/missions");
   };
 
-  // --------------------------- Loading Skeleton ---------------------------
   if (loading) return <MissionDetailSkeleton />;
 
-  // --------------------------- Mission Not Found ---------------------------
   if (!mission) {
     return (
       <div style={{ padding: "4rem", textAlign: "center" }}>
@@ -165,10 +154,8 @@ export default function MissionDetail() {
     );
   }
 
-  // --------------------------- Render Mission Detail ---------------------------
   return (
-    <>
-      {/* Tabs for mobile */}
+    <MissionErrorBoundary>
       <input
         type="radio"
         name="mission-tab"
@@ -196,7 +183,6 @@ export default function MissionDetail() {
       </div>
 
       <div className="mission-detail">
-        {/* ---------------- Story Panel ---------------- */}
         <div className="mission-story">
           <div style={{ marginBottom: "var(--space-md)" }}>
             <span className={`badge badge-${mission.difficulty}`}>
@@ -208,7 +194,6 @@ export default function MissionDetail() {
           </div>
           <ReactMarkdown>{mission.story}</ReactMarkdown>
 
-          {/* Hints */}
           {hintIndex >= 0 && (
             <div
               style={{
@@ -235,7 +220,6 @@ export default function MissionDetail() {
           )}
         </div>
 
-        {/* ---------------- Editor Panel ---------------- */}
         <div className="mission-editor-panel">
           <div className="mission-editor-toolbar">
             <div className="mission-editor-toolbar-left">
@@ -287,30 +271,31 @@ export default function MissionDetail() {
           </div>
 
           <div className="editor-wrapper">
-            <Editor
-              height="100%"
-              defaultLanguage="rust"
-              value={code}
-              onChange={(v) => setCode(v || "")}
-              theme="vs-dark"
-              options={{
-                fontSize: 14,
-                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                padding: { top: 16 },
-                lineNumbers: "on",
-                renderLineHighlight: "all",
-                cursorBlinking: "smooth",
-                wordWrap: "on",
-                tabSize: 4,
-                suggestOnTriggerCharacters: true,
-              }}
-            />
+            <EditorErrorBoundary>
+              <Editor
+                height="100%"
+                defaultLanguage="rust"
+                value={code}
+                onChange={(v) => setCode(v || "")}
+                theme="vs-dark"
+                options={{
+                  fontSize: 14,
+                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  padding: { top: 16 },
+                  lineNumbers: "on",
+                  renderLineHighlight: "all",
+                  cursorBlinking: "smooth",
+                  wordWrap: "on",
+                  tabSize: 4,
+                  suggestOnTriggerCharacters: true,
+                }}
+              />
+            </EditorErrorBoundary>
           </div>
 
-          {/* ---------------- Terminal Panel ---------------- */}
           <div className="mission-terminal-panel">
             <div
               className="terminal"
@@ -355,7 +340,6 @@ export default function MissionDetail() {
         </div>
       </div>
 
-      {/* ---------------- Victory Modal ---------------- */}
       {showVictory && victoryData && (
         <div className="modal-overlay" onClick={() => setShowVictory(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -365,27 +349,6 @@ export default function MissionDetail() {
               You've completed <strong>{mission.title}</strong>
             </p>
             <div className="modal-xp">+{victoryData.xp} XP</div>
-
-            {victoryData.leveledUp && (
-              <p
-                style={{
-                  color: "var(--purple)",
-                  fontFamily: "var(--font-display)",
-                  marginBottom: "1rem",
-                }}
-              >
-                🎉 Level Up! You are now Level {victoryData.newLevel} —{" "}
-                {getRankTitle(victoryData.newLevel)}
-              </p>
-            )}
-
-            {victoryData.newBadges?.length > 0 && (
-              <p style={{ color: "var(--gold)", marginBottom: "1rem" }}>
-                🏅 New badge{victoryData.newBadges.length > 1 ? "s" : ""}{" "}
-                earned!
-              </p>
-            )}
-
             <div
               style={{
                 display: "flex",
@@ -403,8 +366,6 @@ export default function MissionDetail() {
                 Mission Map
               </button>
             </div>
-
-            {/* Okashi Button & Toast */}
             <div
               style={{
                 marginTop: "1.25rem",
@@ -416,77 +377,17 @@ export default function MissionDetail() {
                 gap: "8px",
               }}
             >
-              <button
-                onClick={() => openInOkashi(code)}
-                style={{
-                  padding: "10px 22px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "linear-gradient(135deg, #7c3aed, #2563eb)",
-                  color: "#fff",
-                  fontSize: "14px",
-                  fontWeight: "700",
-                  cursor: "pointer",
-                  boxShadow: "0 4px 14px rgba(124,58,237,0.4)",
-                  transition: "opacity 0.2s",
-                }}
-                onMouseEnter={(e) => (e.target.style.opacity = "0.85")}
-                onMouseLeave={(e) => (e.target.style.opacity = "1")}
-              >
-                🚀 Try on Okashi — Compile & Deploy
+              <button onClick={() => openInOkashi(code)} className="okashi-btn">
+                🚀 Try on Okashi
               </button>
-
-              <p
-                style={{
-                  fontSize: "11px",
-                  color: "#94a3b8",
-                  textAlign: "center",
-                  maxWidth: "300px",
-                  margin: 0,
-                  lineHeight: "1.5",
-                }}
-              >
-                Opens okashi.dev in a new tab. Your code is copied to clipboard
-                — paste it there to compile with the real Soroban compiler and
-                deploy to Testnet.
-              </p>
-
-              {toast.state !== TOAST_STATES.IDLE && (
-                <div
-                  style={{
-                    padding: "10px 16px",
-                    borderRadius: "8px",
-                    fontSize: "13px",
-                    fontWeight: "500",
-                    background:
-                      toast.state === TOAST_STATES.SUCCESS
-                        ? "#064e3b"
-                        : "#4c0519",
-                    color:
-                      toast.state === TOAST_STATES.SUCCESS
-                        ? "#6ee7b7"
-                        : "#fda4af",
-                    border:
-                      toast.state === TOAST_STATES.SUCCESS
-                        ? "1px solid #065f46"
-                        : "1px solid #881337",
-                    maxWidth: "340px",
-                    textAlign: "center",
-                    lineHeight: "1.5",
-                  }}
-                >
-                  {toast.message}
-                </div>
-              )}
             </div>
           </div>
         </div>
       )}
-    </>
+    </MissionErrorBoundary>
   );
 }
 
-// --------------------------- Helper: Delay ---------------------------
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
