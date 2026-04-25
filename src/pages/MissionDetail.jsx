@@ -11,9 +11,12 @@ import {
   getRankTitle,
 } from "../systems/gameEngine";
 import MissionDetailSkeleton from "../components/MissionDetailSkeleton";
-import { useokashi, TOAST_STATES } from "../systems/useokashi";
+import { useokashi } from "../systems/useokashi";
 
-// 1. Import the specialized boundaries
+// 1. Import the toast hook
+import { useToast } from "../systems/ToastContext";
+
+// Import the specialized boundaries
 import {
   EditorErrorBoundary,
   MissionErrorBoundary,
@@ -24,6 +27,10 @@ export default function MissionDetail() {
   const navigate = useNavigate();
   const mission = getMissionById(missionId);
 
+  // Initialize toast with a fallback to avoid crashes if context is missing
+  const toastContext = useToast();
+  const showToast = toastContext?.showToast;
+
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState("");
   const [testResults, setTestResults] = useState([]);
@@ -33,13 +40,13 @@ export default function MissionDetail() {
   const [hintIndex, setHintIndex] = useState(-1);
 
   const terminalBodyRef = useRef(null);
-  const { openInOkashi, toast } = useokashi();
+  const { openInOkashi } = useokashi();
 
   useEffect(() => {
     setLoading(true);
     if (mission) {
       setTimeout(() => {
-        setCode(mission.template);
+        setCode(mission.template || "");
         setTestResults([]);
         setHintIndex(-1);
         setShowVictory(false);
@@ -84,6 +91,7 @@ export default function MissionDetail() {
     addResult({ phase: "summary", message: result.summary });
 
     if (result.allPassed) {
+      if (showToast) showToast("Mission Parameters Validated!", "success");
       await delay(500);
       state = loadProgress();
       const newState = completeMission(state, missionId, mission.xpReward);
@@ -103,28 +111,34 @@ export default function MissionDetail() {
           message: "🏅 Already completed — no additional XP awarded.",
         });
       }
+    } else {
+      if (showToast) showToast("Validation failed. Check terminal.", "error");
     }
 
     setIsRunning(false);
-  }, [code, mission, missionId, isRunning]);
+  }, [code, mission, missionId, isRunning, showToast]);
 
   const handleHint = () => {
-    if (mission && hintIndex < mission.hints.length - 1) {
-      setHintIndex(hintIndex + 1);
+    if (mission?.hints && hintIndex < mission.hints.length - 1) {
+      const nextIndex = hintIndex + 1;
+      setHintIndex(nextIndex);
+      if (showToast) showToast(`Hint ${nextIndex + 1} unlocked`, "info");
     }
   };
 
   const handleReset = () => {
-    if (mission) {
+    if (mission?.template) {
       setCode(mission.template);
       setTestResults([]);
       setHintIndex(-1);
+      if (showToast) showToast("Code reset to template", "warning");
     }
   };
 
   const handleShowSolution = () => {
     if (mission?.solution) {
       setCode(mission.solution);
+      if (showToast) showToast("Solution loaded into editor", "info");
     }
   };
 
@@ -255,17 +269,7 @@ export default function MissionDetail() {
                 onClick={handleRunTests}
                 disabled={isRunning}
               >
-                {isRunning ? (
-                  <>
-                    <span
-                      className="spinner"
-                      style={{ width: 14, height: 14 }}
-                    />{" "}
-                    Running...
-                  </>
-                ) : (
-                  "▶ Run Tests"
-                )}
+                {isRunning ? "Running..." : "▶ Run Tests"}
               </button>
             </div>
           </div>
@@ -282,15 +286,7 @@ export default function MissionDetail() {
                   fontSize: 14,
                   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                   minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
                   automaticLayout: true,
-                  padding: { top: 16 },
-                  lineNumbers: "on",
-                  renderLineHighlight: "all",
-                  cursorBlinking: "smooth",
-                  wordWrap: "on",
-                  tabSize: 4,
-                  suggestOnTriggerCharacters: true,
                 }}
               />
             </EditorErrorBoundary>
@@ -328,7 +324,6 @@ export default function MissionDetail() {
                     <span
                       key={i}
                       className={`terminal-line ${r.passed === true ? "pass" : r.passed === false ? "fail" : "info"}`}
-                      style={{ animationDelay: `${i * 0.05}s` }}
                     >
                       {r.message}
                     </span>
