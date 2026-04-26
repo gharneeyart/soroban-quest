@@ -184,13 +184,13 @@ export default function MissionMap() {
                     <defs>
                         <filter id="glowCyan" x="-50%" y="-50%" width="200%" height="200%">
                             <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-                            <feFlood floodColor="#06d6a0" floodOpacity="0.4" />
+                            <feFlood floodColor="var(--cyan)" floodOpacity="0.4" />
                             <feComposite in2="blur" operator="in" />
                             <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
                         </filter>
                         <filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
                             <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-                            <feFlood floodColor="#22c55e" floodOpacity="0.4" />
+                            <feFlood floodColor="var(--green)" floodOpacity="0.4" />
                             <feComposite in2="blur" operator="in" />
                             <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
                         </filter>
