@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import MissionMap from "./pages/MissionMap";
@@ -17,6 +17,9 @@ import { ToastProvider } from "./systems/ToastContext";
 import "./systems/Toast.css";
 
 export default function App() {
+  // useLocation gives us a stable key that changes on every navigation.
+  const location = useLocation();
+
   return (
     <ErrorBoundary>
       {/* 3. Wraped everything in ToastProvider */}
